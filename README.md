@@ -22,40 +22,56 @@ flowchart LR
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.sample .env
 ```
 
 Fill `.env` with `GEMINI_API_KEY`. `GEMINI_FILE_SEARCH_STORE_NAME` is optional; if blank, `main.py` creates a store and saves it in `data/state.json`.
+
+Check that commands are using the virtual environment:
+
+```bash
+which python
+which pytest
+```
+
+Expected paths should start with this project path, for example `.venv/bin/python`. If `pytest` points to `/usr/bin/pytest`, reactivate the venv or use `.venv/bin/python -m pytest -q`.
 
 ## Run
 
 Run one full scrape/upload sync:
 
 ```bash
-python3 main.py
+python main.py
 ```
 
 Ask the bot:
 
 ```bash
-python3 ask_gemini.py "How do I add a YouTube video?"
+python ask_gemini.py "How do I add a YouTube video?"
 ```
 
 Fetch the latest GitHub Actions-generated data back to local:
 
 ```bash
-python3 scripts/fetch_github_actions_data.py
+python scripts/fetch_github_actions_data.py
 ```
 
 GitHub Actions artifacts require authentication through the GitHub API. If you see `401 Requires authentication`, create a GitHub token and export it before running the script:
 
 ```bash
 export GH_TOKEN=REPLACE_WITH_TOKEN
-python3 scripts/fetch_github_actions_data.py
+python scripts/fetch_github_actions_data.py
 ```
 
-For a fine-grained token, select this repository and grant read-only access to Actions. Do not commit the token to `.env` or source files.
+For a fine-grained token:
+
+```txt
+Repository access: only nlgiahuy01112003/kb-harvest
+Permissions: Actions read-only, Metadata read-only
+```
+
+`GH_TOKEN` is only for local artifact download. It is not the Gemini API key. Prefer `export GH_TOKEN=...` in the terminal. If you put it in `.env`, load it with `set -a && source .env && set +a`, and never commit `.env`.
 
 ## Docker
 
@@ -139,9 +155,9 @@ sync-state         -> data/state.json
 ## Verify
 
 ```bash
-python3 scripts/check_deliverables.py
-python3 scripts/check_no_secrets.py
-pytest -q
+python scripts/check_deliverables.py
+python scripts/check_no_secrets.py
+python -m pytest -q
 ```
 
 Sample question for the screenshot:
