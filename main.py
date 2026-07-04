@@ -87,6 +87,17 @@ def upload_changed_articles(
     return uploaded_document_names
 
 
+def article_needs_upload(article: ScrapedArticle, state: dict) -> bool:
+    if article.status in {STATUS_ADDED, STATUS_UPDATED}:
+        return True
+    document_name = state["articles"].get(str(article.id), {}).get("gemini_document_name", "")
+    return not document_name
+
+
+def articles_needing_upload(scraped_articles: list[ScrapedArticle], state: dict) -> list[ScrapedArticle]:
+    return [article for article in scraped_articles if article_needs_upload(article, state)]
+
+
 def count_article_statuses(scraped_articles: list[ScrapedArticle]) -> dict[str, int]:
     return {
         "added": sum(1 for article in scraped_articles if article.status == STATUS_ADDED),
@@ -95,21 +106,14 @@ def count_article_statuses(scraped_articles: list[ScrapedArticle]) -> dict[str, 
     }
 
 
-def changed_markdown_paths(scraped_articles: list[ScrapedArticle]) -> list[Path]:
-    return [
-        article.markdown_path
-        for article in scraped_articles
-        if article.status in {STATUS_ADDED, STATUS_UPDATED}
-    ]
-
-
 def build_run_log(
     config: SyncConfig,
     scraped_articles: list[ScrapedArticle],
+    uploaded_articles: list[ScrapedArticle],
     uploaded_document_names: list[str],
     store_name: str,
 ) -> dict:
-    changed_paths = changed_markdown_paths(scraped_articles)
+    uploaded_paths = [article.markdown_path for article in uploaded_articles]
     counts = count_article_statuses(scraped_articles)
 
     return {
@@ -121,7 +125,7 @@ def build_run_log(
         **counts,
         "files_uploaded": len(uploaded_document_names),
         "uploaded_document_names": uploaded_document_names,
-        "estimated_chunks": estimate_chunks(changed_paths) if changed_paths else 0,
+        "estimated_chunks": estimate_chunks(uploaded_paths) if uploaded_paths else 0,
         "gemini_file_search_store_name": store_name,
     }
 
@@ -143,16 +147,20 @@ def run_sync(config: SyncConfig) -> dict:
         output_dir=MARKDOWN_DIR,
         previous_state=state,
     )
-    changed_articles = [
-        article for article in scraped_articles if article.status in {STATUS_ADDED, STATUS_UPDATED}
-    ]
+    upload_articles = articles_needing_upload(scraped_articles, state)
 
     client = get_client()
     store_name = ensure_file_search_store(client, state)
     save_state(STATE_PATH, state)
 
-    uploaded_document_names = upload_changed_articles(client, store_name, changed_articles, state)
-    run_log = build_run_log(config, scraped_articles, uploaded_document_names, store_name)
+    uploaded_document_names = upload_changed_articles(client, store_name, upload_articles, state)
+    run_log = build_run_log(
+        config,
+        scraped_articles,
+        upload_articles,
+        uploaded_document_names,
+        store_name,
+    )
     write_json(RUN_LOG_PATH, run_log)
     save_state(STATE_PATH, state)
 
