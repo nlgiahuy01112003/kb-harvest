@@ -72,7 +72,7 @@ jobs:
         if: ${{ github.event.inputs.dry_run_scrape_only != 'true' }}
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_FILE_SEARCH_STORE_NAME: ${{ secrets.GEMINI_FILE_SEARCH_STORE_NAME }}
+          GEMINI_FILE_SEARCH_STORE_NAME: ${{ secrets.GEMINI_FILE_SEARCH_STORE_NAME || vars.GEMINI_FILE_SEARCH_STORE_NAME }}
           SUPPORT_BASE_URL: https://support.optisigns.com
           SUPPORT_LOCALE: en-us
           MAX_ARTICLES: ${{ github.event.inputs.max_articles || '35' }}
