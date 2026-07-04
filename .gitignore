@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.sample
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+_site/
+data/markdown/*.md
+!data/markdown/.gitkeep
+data/state.json
+data/run-log.json
+*.pyc

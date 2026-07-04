@@ -1,0 +1,12 @@
+.env
+.git
+.github
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+data/markdown/*.md
+data/state.json
+data/run-log.json
+screenshots/*.png
+

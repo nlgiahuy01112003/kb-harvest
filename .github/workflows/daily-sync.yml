@@ -1,0 +1,119 @@
+name: Daily Knowledge Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_articles:
+        description: Number of Zendesk articles to sync
+        required: false
+        default: "35"
+      dry_run_scrape_only:
+        description: Scrape only; skip Gemini upload
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: daily-knowledge-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Restore sync state
+        uses: actions/cache@v4
+        with:
+          path: data/state.json
+          key: kb-harvest-state-${{ github.run_id }}
+          restore-keys: |
+            kb-harvest-state-
+
+      - name: Validate required secrets
+        if: ${{ github.event.inputs.dry_run_scrape_only != 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY secret is required for upload runs." >&2
+            exit 1
+          fi
+
+      - name: Scrape only dry run
+        if: ${{ github.event.inputs.dry_run_scrape_only == 'true' }}
+        env:
+          MAX_ARTICLES: ${{ github.event.inputs.max_articles || '35' }}
+          SUPPORT_REQUIRED_ARTICLE_IDS: "360051014713"
+        run: python scripts/dry_run_scrape.py
+
+      - name: Run sync
+        if: ${{ github.event.inputs.dry_run_scrape_only != 'true' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_FILE_SEARCH_STORE_NAME: ${{ secrets.GEMINI_FILE_SEARCH_STORE_NAME }}
+          SUPPORT_BASE_URL: https://support.optisigns.com
+          SUPPORT_LOCALE: en-us
+          MAX_ARTICLES: ${{ github.event.inputs.max_articles || '35' }}
+          SUPPORT_REQUIRED_ARTICLE_IDS: "360051014713"
+          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_EMBEDDING_MODEL: models/gemini-embedding-001
+        run: python main.py
+
+      - name: Add run summary
+        if: always()
+        run: |
+          if [ -f data/run-log.json ]; then
+            echo "## Knowledge Sync Run" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat data/run-log.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No run-log.json was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload run log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: run-log
+          path: data/run-log.json
+          if-no-files-found: ignore
+
+      - name: Upload sync state
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sync-state
+          path: data/state.json
+          if-no-files-found: ignore
+
+      - name: Upload generated Markdown
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generated-markdown
+          path: data/markdown/*.md
+          if-no-files-found: ignore
