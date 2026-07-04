@@ -59,6 +59,36 @@ def test_download_artifact_requires_token(tmp_path: Path) -> None:
         fetcher.download_artifact("owner/repo", 123, None, tmp_path / "artifact.zip")
 
 
+def test_download_artifact_follows_redirect_without_reusing_github_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage_urls = []
+
+    class FakeOpener:
+        def open(self, request, timeout=60):
+            raise fetcher.urllib.error.HTTPError(
+                request.full_url,
+                302,
+                "Found",
+                {"Location": "https://artifact-storage.example/download.zip"},
+                None,
+            )
+
+    monkeypatch.setattr(fetcher.urllib.request, "build_opener", lambda *handlers: FakeOpener())
+    monkeypatch.setattr(
+        fetcher,
+        "download_url",
+        lambda url: storage_urls.append(url) or b"artifact-bytes",
+    )
+
+    output_path = tmp_path / "artifact.zip"
+    fetcher.download_artifact("owner/repo", 123, "github-token", output_path)
+
+    assert storage_urls == ["https://artifact-storage.example/download.zip"]
+    assert output_path.read_bytes() == b"artifact-bytes"
+
+
 def test_build_minimal_state_from_run_log_and_markdown(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     markdown_dir = data_dir / "markdown"

@@ -26,6 +26,11 @@ ARTIFACT_TARGETS = {
 REQUIRED_ARTIFACTS = {"run-log", "generated-markdown"}
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _run_git_remote() -> str:
     result = subprocess.run(
         ["git", "remote", "get-url", "origin"],
@@ -72,6 +77,32 @@ def github_request(url: str, token: str | None = None) -> Any:
     if "application/json" in content_type:
         return json.loads(data.decode("utf-8"))
     return data
+
+
+def github_headers(token: str | None = None) -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "kb-harvest-artifact-fetcher",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def download_url(url: str) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "kb-harvest-artifact-fetcher",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Artifact storage download error {exc.code}: {detail}") from exc
 
 
 def resolve_github_token() -> str | None:
@@ -122,8 +153,23 @@ def download_artifact(repo: str, artifact_id: int, token: str | None, destinatio
         )
 
     url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
-    data = github_request(url, token)
-    destination.write_bytes(data)
+    request = urllib.request.Request(url, headers=github_headers(token))
+    opener = urllib.request.build_opener(NoRedirectHandler)
+
+    try:
+        with opener.open(request, timeout=60) as response:
+            destination.write_bytes(response.read())
+            return
+    except urllib.error.HTTPError as exc:
+        if exc.code not in {302, 303, 307, 308}:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"GitHub API error {exc.code} for {url}: {detail}") from exc
+
+        artifact_url = exc.headers.get("Location")
+        if not artifact_url:
+            raise RuntimeError("GitHub artifact response did not include a download URL.") from exc
+
+    destination.write_bytes(download_url(artifact_url))
 
 
 def _extract_single_file(zip_path: Path, output_path: Path) -> None:
