@@ -48,12 +48,14 @@ Fetch the latest GitHub Actions-generated data back to local:
 python3 scripts/fetch_github_actions_data.py
 ```
 
-If artifact download requires auth:
+GitHub Actions artifacts require authentication through the GitHub API. If you see `401 Requires authentication`, create a GitHub token and export it before running the script:
 
 ```bash
 export GH_TOKEN=REPLACE_WITH_TOKEN
 python3 scripts/fetch_github_actions_data.py
 ```
+
+For a fine-grained token, select this repository and grant read-only access to Actions. Do not commit the token to `.env` or source files.
 
 ## Docker
 
@@ -76,12 +78,14 @@ Schedule: daily at `02:00 UTC`
 
 Last run logs: https://github.com/nlgiahuy01112003/kb-harvest/actions
 
-Required repository secrets:
+Required GitHub Actions configuration:
 
 ```txt
-GEMINI_API_KEY
-GEMINI_FILE_SEARCH_STORE_NAME
+Secret:   GEMINI_API_KEY
+Variable: GEMINI_FILE_SEARCH_STORE_NAME
 ```
+
+`GEMINI_FILE_SEARCH_STORE_NAME` is optional for the first run. If blank, the workflow creates a new Gemini File Search store and writes the store name to `data/run-log.json`. Add it as a repository variable when you want all later cloud runs to keep using the same store.
 
 Artifacts produced by each run:
 
@@ -97,7 +101,7 @@ sync-state         -> data/state.json
 - The job pulls at least 30 articles and always includes article `360051014713` for the YouTube demo question.
 - Markdown keeps headings, code blocks, useful links, and an `Article URL:` citation line.
 - Delta detection uses SHA-256 hashes stored in `data/state.json`.
-- Only added or updated Markdown files are uploaded to Gemini.
+- Added/updated Markdown files are uploaded to Gemini. If local/cloud state has article hashes but missing Gemini document names, the job uploads those skipped files once to repair the store.
 - Gemini chunking uses 512-token whitespace chunks with 100-token overlap.
 - Secrets stay outside git: `.env` is ignored and `.env.sample` documents required variables.
 

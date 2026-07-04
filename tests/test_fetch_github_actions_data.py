@@ -54,6 +54,11 @@ def test_extract_single_file(tmp_path: Path) -> None:
     assert output_path.read_text(encoding="utf-8") == '{"ok": true}\n'
 
 
+def test_download_artifact_requires_token(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="requires GitHub authentication"):
+        fetcher.download_artifact("owner/repo", 123, None, tmp_path / "artifact.zip")
+
+
 def test_build_minimal_state_from_run_log_and_markdown(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     markdown_dir = data_dir / "markdown"

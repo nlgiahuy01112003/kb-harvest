@@ -114,6 +114,13 @@ def list_run_artifacts(repo: str, run_id: int, token: str | None) -> dict[str, d
 
 
 def download_artifact(repo: str, artifact_id: int, token: str | None, destination: Path) -> None:
+    if not token:
+        raise RuntimeError(
+            "Artifact download requires GitHub authentication. "
+            "Create a GitHub token with Actions read access, then run "
+            "`export GH_TOKEN=...` before this command."
+        )
+
     url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
     data = github_request(url, token)
     destination.write_bytes(data)
@@ -293,7 +300,8 @@ def main() -> int:
         )
     except RuntimeError as exc:
         print(f"Error: {exc}")
-        print("If the GitHub API rejects artifact download, set GH_TOKEN or GITHUB_TOKEN.")
+        print("Fix: set GH_TOKEN or GITHUB_TOKEN, then rerun this script.")
+        print("Token scope: read-only repo/Actions access is enough for this repository.")
         return 1
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
